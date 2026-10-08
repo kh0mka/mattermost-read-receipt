@@ -1,0 +1,6 @@
+webapp/node_modules/
+webapp/dist/
+server/dist/
+dist/
+*.tar.gz
+*.db

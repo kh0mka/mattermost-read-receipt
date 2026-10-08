@@ -1,0 +1,80 @@
+{
+  "id": "com.mst.read-receipt",
+  "name": "MST Read Receipts",
+  "description": "Automatic sent, delivered, and seen status on direct messages, group messages, and channels from allowed senders.",
+  "version": "0.2.0",
+  "min_server_version": "11.0.0",
+  "server": {
+    "executables": {
+      "linux-amd64": "server/dist/plugin-linux-amd64",
+      "linux-arm64": "server/dist/plugin-linux-arm64"
+    }
+  },
+  "webapp": {
+    "bundle_path": "webapp/dist/main.js"
+  },
+  "settings_schema": {
+    "header": "Status is shown only for allowed senders, and only after the matching auto-receipt switch is on. Defaults stay off until an admin starts the pilot.",
+    "footer": "Seen means the recipient's channel view time is at or after the message. It is not proof they read the specific text. Public and private channels with more than 50 other members are not tracked.",
+    "settings": [
+      {
+        "key": "Enabled",
+        "display_name": "Enabled",
+        "type": "bool",
+        "help_text": "Master switch. When off, no new receipts are tracked.",
+        "default": true
+      },
+      {
+        "key": "AllowedRoles",
+        "display_name": "Allowed roles",
+        "type": "text",
+        "help_text": "Comma-separated role names. A sender needs one of these roles, or an ID in Allowed user IDs.",
+        "placeholder": "system_admin",
+        "default": "system_admin"
+      },
+      {
+        "key": "AllowedUserIDs",
+        "display_name": "Allowed user IDs",
+        "type": "text",
+        "help_text": "Comma-separated Mattermost user IDs (for HR people who do not have a dedicated role).",
+        "placeholder": "",
+        "default": ""
+      },
+      {
+        "key": "PollIntervalSeconds",
+        "display_name": "Poll interval (seconds)",
+        "type": "number",
+        "help_text": "How often the server checks whether recipients have opened the conversation. Minimum 5.",
+        "default": 20
+      },
+      {
+        "key": "AutoReceiptForAllowedSendersInDM",
+        "display_name": "Automatic status in direct messages",
+        "type": "bool",
+        "help_text": "When on, every new direct message from an allowed sender gets sent/delivered/seen status.",
+        "default": false
+      },
+      {
+        "key": "AutoReceiptIncludeGM",
+        "display_name": "Automatic status in group messages",
+        "type": "bool",
+        "help_text": "When on, group messages from allowed senders are tracked too. Direct messages and channels are controlled separately.",
+        "default": false
+      },
+      {
+        "key": "AutoReceiptIncludeChannel",
+        "display_name": "Automatic status in channels",
+        "type": "bool",
+        "help_text": "When on, posts from allowed senders in public and private channels are tracked. Channels with more than 50 other members are skipped. Direct messages and group messages are controlled separately.",
+        "default": false
+      },
+      {
+        "key": "PostPublicReceiptOnRead",
+        "display_name": "Thread note when everyone has seen it",
+        "type": "bool",
+        "help_text": "Posts a thread reply on the original message. The check marks are the status people should use.",
+        "default": false
+      }
+    ]
+  }
+}
