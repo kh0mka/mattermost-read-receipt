@@ -2,7 +2,7 @@
 
 Plugin id: `com.mst.read-receipt`.
 
-Allowed senders see automatic status on their own direct messages, group messages, and public or private channel posts. Each of those is a separate switch. There is no per-message request. Recipients do not see extra controls.
+Allowed senders see automatic status on their own direct messages, group messages, and public or private channel posts. Each of those is a separate switch. There is no per-message “request receipt” action. Recipients do not see extra controls.
 
 ## What the sender sees
 
@@ -12,10 +12,10 @@ On web and the desktop app, a mark appears after the message time:
 - Two checks, one blue and one grey: some other members have opened the conversation.
 - Two blue checks: every other member has opened the conversation.
 
-Select the mark for the popover.
+Select the mark for the popover. It opens just below that tick, or just above it when the tick is near the bottom of the window. The list is drawn outside the message row so the header does not clip it, and it stays next to the tick while the channel scrolls.
 
 - A **direct message** shows **Seen** and **Delivered**.
-- A **group message** or **channel** shows two lists: **Read** (name and time) and **Not yet read** (name only).
+- A **group message** or **channel** shows two lists: **Read** (name and time) and **Not yet read** (name only). A channel is never shown as Seen / Delivered. That includes a status payload whose channel type is missing.
 
 Times use the viewer’s timezone. The profile timezone is used when it is set: `manualTimezone` when `timezone.useAutomaticTimezone` is the string `"false"`, otherwise `automaticTimezone`. If neither IANA name is set, the browser timezone is used. Formatting is `Intl.DateTimeFormat` with the `timeZone` option.
 
@@ -27,13 +27,15 @@ When several messages from the same person are grouped, Mattermost hides the ext
 
 Seen means the recipient’s channel view time is at or after the message (`LastViewedAt >= post.CreateAt`). Mattermost updates that time when someone opens the conversation in the browser, desktop app, or mobile app. It is not proof they read that specific text.
 
-The author is not in the recipient list. In a group message, every other member is included. In a public or private channel, the same rule applies up to **50 other members**. A channel with more than 50 other members is not tracked. A channel that later grows past that cap stops being tracked.
+The author is not in the recipient list. In a group message, every other member is included. In a public or private channel, the same rule applies up to **50 other members**. A channel with more than 50 other members is not tracked, so the poller does not walk a company-wide channel. A channel that later grows past that cap stops being tracked.
 
-The sender’s mobile app does not load this plugin, so ticks do not appear there. A recipient on mobile still advances the view time, and a sender on web or desktop sees that on the next check.
+The Android and iOS apps do not load webapp plugin bundles, so the ticks from `registerPostHeaderComponent` never appear there. A recipient on mobile still advances the view time, and a sender on web or desktop sees that on the next check.
 
 ## Thread note
 
-The optional thread reply is the same stored text for everyone. It does not contain a clock time or a “UTC” label. The seen instant is a post property on the note (`mst_read_receipt_seen_at`, epoch milliseconds). The webapp formats that instant in the viewer’s timezone. Older notes that still say `UTC` are rewritten in the webapp from that UTC clock time. The original message is not edited.
+The thread note is off. The plugin does not post or update a reply that says Seen, Read, or Not yet read. Status is the tick on web, and the click popover. Existing thread replies are left in the channels. The original message is not edited.
+
+Older notes that still say `UTC` are rewritten on web from `mst_read_receipt_seen_at`. The Android and iOS apps still do not load the web ticks.
 
 ## Switches
 
@@ -48,13 +50,15 @@ System Console → Plugins → MST Read Receipts.
 | Automatic status in direct messages | off | Every new DM from an allowed sender |
 | Automatic status in group messages | off | Separate from direct messages and channels |
 | Automatic status in channels | off | Public and private channels. Skips channels with more than 50 other members |
-| Thread note when everyone has seen it | off | Optional reply. The checks are the status |
+| Thread note | off | Not posted. The tick on web is the status. Existing replies stay |
 
-Leave the automatic switches off until an admin enables the ones you want. Turning on one does not turn on the others.
+Leave the automatic switches off until the pilot group is chosen. Turning on one does not turn on the others.
+
+There is no HR role on this server. Put those people in **Allowed user IDs**, then turn on the automatic switches you want.
 
 ## Build and install
 
-From the repository root:
+From `read-receipt/`:
 
 ```bash
 bash scripts/docker-build.sh
@@ -72,3 +76,5 @@ Health check: `GET /plugins/com.mst.read-receipt/api/v1/health`
 Receipts are stored in Mattermost’s data directory under `com.mst.read-receipt/read_receipts.db`, so a plugin upgrade does not wipe them.
 
 After enabling or upgrading, hard-refresh the browser. Desktop apps need **Clear Cache and Reload**.
+
+`scripts/post-upgrade-mattermost.sh` reinstalls this plugin with the other custom plugins. It does not turn the automatic switches on.

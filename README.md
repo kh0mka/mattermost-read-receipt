@@ -1,6 +1,6 @@
 # Mattermost read receipts
 
-Team Edition plugin (`com.mst.read-receipt`, version 0.2.0) for allowed senders. It shows sent, delivered, and seen status on direct messages, group messages, and channels. Each of those is a separate switch. There is no per-message request. Recipients do not see extra controls.
+Team Edition plugin (`com.mst.read-receipt`, version 0.3.3) for allowed senders. It shows sent, delivered, and seen status on direct messages, group messages, and channels. Each of those is a separate switch. There is no per-message request. Recipients do not see extra controls.
 
 Requires Mattermost Server 11.0.0 or newer.
 
@@ -12,10 +12,10 @@ On the web app and the desktop app, a mark appears after the message time:
 - Two checks, one blue and one grey: some other members have opened the conversation.
 - Two blue checks: every other member has opened the conversation.
 
-Select the mark for the popover.
+Select the mark. The list opens beside that tick. It is drawn on the page, outside the message row, so the channel header does not clip it. Placement uses the tick’s position in the window. Near the bottom of the window the list flips above the tick. It stays next to the tick while the channel scrolls.
 
 - A **direct message** shows **Seen** and **Delivered**. Delivered is the server accept time (`post.CreateAt`). There is no later delivery acknowledgement.
-- A **group message** or **channel** shows **Read** (name and time) and **Not yet read** (name only).
+- A **group message** or **channel** shows **Read** (name and time) and **Not yet read** (name only). Clicking the tick opens those two lists.
 
 Mattermost already shows **Sending** and **Message failed**. This plugin does not draw those.
 
@@ -58,11 +58,11 @@ Automatic status stays off until an admin enables it. Turning on one switch does
 | Automatic status in direct messages | off |
 | Automatic status in group messages | off |
 | Automatic status in channels | off |
-| Thread note when everyone has seen it | off |
+| Thread note | off |
 
 People who should see receipts, and who do not have an allowed role, can be listed as comma-separated Mattermost user IDs.
 
-The optional thread note is one stored reply for everyone. It does not contain a clock time. The seen instant is a post property (`mst_read_receipt_seen_at`, epoch milliseconds), and the web app formats that instant in the viewer’s timezone. The original message is not edited. The check marks are the status people should use.
+Thread Seen and Read replies stay off. `PostPublicReceiptOnRead` stays false. The plugin does not post or update a receipt thread note. Existing replies are left in place. Status is the tick and the list beside it. The original message is not edited.
 
 ## Build and install
 

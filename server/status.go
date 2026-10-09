@@ -15,6 +15,11 @@ const (
 // every member except the author is included.
 const channelRecipientCap = 50
 
+// noteBackfillLimit is how many recent tracked posts get a thread note when
+// the mobile note switch is already on. Older posts pick up a note the next
+// time their read state changes.
+const noteBackfillLimit = 50
+
 type memberView struct {
 	UserID       string
 	LastViewedAt int64

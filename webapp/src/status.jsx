@@ -46,18 +46,20 @@ export function onSocket(msg) {
 }
 
 export function installStyles() {
-    if (document.getElementById('mst-rr-style')) {
-        return;
+    let style = document.getElementById('mst-rr-style');
+    if (!style) {
+        style = document.createElement('style');
+        style.id = 'mst-rr-style';
+        document.head.appendChild(style);
     }
-    const style = document.createElement('style');
-    style.id = 'mst-rr-style';
     style.textContent = [
-        '.mst-rr-btn{border:0;background:transparent;padding:0 2px;margin-left:4px;line-height:0;cursor:pointer;color:inherit;}',
+        '.mst-rr-header,.mst-rr-fallback-row{pointer-events:auto;}',
+        '.mst-rr-btn{border:0;background:transparent;padding:2px 4px;margin-left:4px;line-height:0;cursor:pointer;color:inherit;pointer-events:auto;position:relative;z-index:2;}',
         '.mst-rr-btn:focus-visible{outline:2px solid ' + BLUE + ';outline-offset:1px;border-radius:4px;}',
-        '.mst-rr-pop{position:fixed;z-index:2000;min-width:220px;max-width:320px;max-height:360px;overflow:auto;background:var(--center-channel-bg,#fff);color:var(--center-channel-color,#1c2430);border:1px solid rgba(63,67,80,.16);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:8px 10px;text-align:left;font-size:12px;line-height:1.35;}',
+        '.mst-rr-pop{position:fixed;z-index:10000;pointer-events:auto;min-width:220px;max-width:320px;max-height:360px;overflow:auto;background:var(--center-channel-bg,#fff);color:var(--center-channel-color,#1c2430);border:1px solid rgba(63,67,80,.16);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:8px 10px;text-align:left;font-size:12px;line-height:1.35;}',
         '.mst-rr-row{display:flex;gap:8px;align-items:flex-start;margin:6px 0;}',
         '.mst-rr-group{margin:8px 0;}',
-        '.mst-rr-label{font-weight:600;min-width:78px;}',
+        '.mst-rr-label{font-weight:600;display:inline-block;min-width:78px;}',
         '.mst-rr-group .mst-rr-label{display:block;min-width:0;margin-bottom:2px;}',
         '.mst-rr-people{margin:0;padding:0;list-style:none;}',
         '.mst-rr-people li{margin:2px 0;}',
@@ -65,7 +67,6 @@ export function installStyles() {
         '.mst-rr-fallback-row{display:flex;justify-content:flex-end;}',
         '.mst-rr-marks{display:inline-flex;align-items:center;}',
     ].join('');
-    document.head.appendChild(style);
 }
 
 function currentUserId() {
@@ -245,6 +246,12 @@ export function formatNoteMessage(post, message) {
     if (!message || !isReceiptNote(post)) {
         return message;
     }
+    // Channel and group notes are a shared Read / Not yet read list. Leave
+    // them unchanged. Only the single-line direct-message note gets a
+    // viewer-local time, and only in this webapp.
+    if (message.indexOf('\n') !== -1 || message.indexOf('Not yet read') !== -1) {
+        return message;
+    }
     let ms = Number(post.props && post.props[SEEN_PROP]);
     if (!ms) {
         const match = UTC_NOTE.exec(message);
@@ -298,13 +305,12 @@ function Marks({status}) {
 }
 
 function usesGroupedList(status) {
-    if (!status || status.channel_type === 'D') {
+    if (!status) {
         return false;
     }
-    if (status.channel_type === 'G' || status.channel_type === 'O' || status.channel_type === 'P') {
-        return true;
-    }
-    return (status.recipients || []).length > 1;
+    // Missing channel_type is a channel or group, not a direct message.
+    // A direct message is only the explicit "D" type, which stays Seen / Delivered.
+    return status.channel_type !== 'D';
 }
 
 function labelFor(status) {
@@ -346,10 +352,92 @@ function people(list, timeField, emptyLabel) {
     );
 }
 
-function Popover({status, anchor}) {
-    const rect = anchor.getBoundingClientRect();
-    const left = Math.max(8, Math.min(rect.left, window.innerWidth - 336));
-    const top = rect.bottom + 6;
+function copyRect(rect) {
+    return {
+        top: rect.top,
+        bottom: rect.bottom,
+        left: rect.left,
+        width: rect.width,
+        height: rect.height,
+    };
+}
+
+function anchorFromClick(event) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const midY = (rect.top + rect.bottom) / 2;
+    if (rect.width >= 1 && rect.height >= 1 && Math.abs(midY - event.clientY) <= 48) {
+        return copyRect(rect);
+    }
+    // The message list parks every row at the top and moves it with a
+    // transform. A box read before that move is not the tick under the pointer.
+    const size = 16;
+    return {
+        top: event.clientY - size / 2,
+        bottom: event.clientY + size / 2,
+        left: event.clientX - size / 2,
+        width: size,
+        height: size,
+    };
+}
+
+function placePopover(rect, height) {
+    const width = 320;
+    const gap = 6;
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+    let top = rect.bottom + gap;
+    if (top + height > window.innerHeight - 8) {
+        const above = rect.top - gap - height;
+        if (above >= 8) {
+            top = above;
+        }
+    }
+    return {top, left};
+}
+
+function mountPopover(node) {
+    // The channel post list positions rows with CSS transforms, and the
+    // header column clips overflow. A fixed box inside that row is placed
+    // against the row and never shows. document.body is outside that box.
+    const reactDOM = typeof window !== 'undefined' ? window.ReactDOM : null;
+    if (reactDOM && typeof reactDOM.createPortal === 'function' && document.body) {
+        return reactDOM.createPortal(node, document.body);
+    }
+    return node;
+}
+
+function Popover({status, anchor, anchorRect, popRef}) {
+    const [box, setBox] = React.useState(() => placePopover(anchorRect, 96));
+    React.useLayoutEffect(() => {
+        let frame = 0;
+        let scrolled = false;
+        const update = () => {
+            if (!anchor || !anchor.isConnected) {
+                return;
+            }
+            const rect = anchor.getBoundingClientRect();
+            if (rect.width < 1 && rect.height < 1) {
+                return;
+            }
+            if (!scrolled && Math.abs(rect.top - anchorRect.top) > 80) {
+                return;
+            }
+            const height = (popRef.current && popRef.current.offsetHeight) || 96;
+            setBox(placePopover(rect, height));
+        };
+        const onScroll = () => {
+            scrolled = true;
+            window.cancelAnimationFrame(frame);
+            frame = window.requestAnimationFrame(update);
+        };
+        frame = window.requestAnimationFrame(update);
+        document.addEventListener('scroll', onScroll, true);
+        window.addEventListener('resize', onScroll);
+        return () => {
+            window.cancelAnimationFrame(frame);
+            document.removeEventListener('scroll', onScroll, true);
+            window.removeEventListener('resize', onScroll);
+        };
+    }, [anchor, anchorRect, popRef]);
     const recipients = status.recipients || [];
     const deliveredAt = status.create_at;
     let body;
@@ -381,8 +469,8 @@ function Popover({status, anchor}) {
             </React.Fragment>
         );
     }
-    return (
-        <div className='mst-rr-pop' style={{top, left}} role='dialog' aria-label='Message status'>
+    return mountPopover(
+        <div ref={popRef} className='mst-rr-pop' style={{position: 'fixed', top: box.top, left: box.left}} role='dialog' aria-label='Message status'>
             {body}
         </div>
     );
@@ -407,14 +495,47 @@ function trackedPost(post) {
 function StatusButton({post}) {
     const status = useStatus(post && post.id);
     const btnRef = React.useRef(null);
+    const popRef = React.useRef(null);
     const [open, setOpen] = React.useState(false);
+    const [anchorRect, setAnchorRect] = React.useState(null);
+    const visible = trackedPost(post) && status && status.status !== 'skipped';
+
+    React.useLayoutEffect(() => {
+        const btn = btnRef.current;
+        if (!btn) {
+            return undefined;
+        }
+        const stop = (event) => {
+            event.stopPropagation();
+            if (event.stopImmediatePropagation) {
+                event.stopImmediatePropagation();
+            }
+        };
+        const onClick = (event) => {
+            const nextRect = anchorFromClick(event);
+            stop(event);
+            event.preventDefault();
+            setAnchorRect(nextRect);
+            setOpen((value) => !value);
+        };
+        btn.addEventListener('mousedown', stop);
+        btn.addEventListener('click', onClick);
+        return () => {
+            btn.removeEventListener('mousedown', stop);
+            btn.removeEventListener('click', onClick);
+        };
+    }, [visible]);
 
     React.useEffect(() => {
         if (!open) {
             return undefined;
         }
         const close = (event) => {
-            if (btnRef.current && btnRef.current.contains(event.target)) {
+            const target = event.target;
+            if (btnRef.current && btnRef.current.contains(target)) {
+                return;
+            }
+            if (popRef.current && popRef.current.contains(target)) {
                 return;
             }
             setOpen(false);
@@ -432,7 +553,7 @@ function StatusButton({post}) {
         };
     }, [open]);
 
-    if (!trackedPost(post) || !status || status.status === 'skipped') {
+    if (!visible) {
         return null;
     }
     const label = labelFor(status);
@@ -445,16 +566,10 @@ function StatusButton({post}) {
                 aria-label={label}
                 title={label}
                 aria-expanded={open}
-                onMouseDown={(event) => event.stopPropagation()}
-                onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    setOpen((value) => !value);
-                }}
             >
                 <Marks status={status.status}/>
             </button>
-            {open && btnRef.current ? <Popover status={status} anchor={btnRef.current}/> : null}
+            {open && anchorRect && btnRef.current ? <Popover status={status} anchor={btnRef.current} anchorRect={anchorRect} popRef={popRef}/> : null}
         </React.Fragment>
     );
 }

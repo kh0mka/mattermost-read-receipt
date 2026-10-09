@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -74,9 +73,6 @@ func (p *ReadReceiptPlugin) refreshOne(row *receiptRow) bool {
 	if status != prev || changed {
 		p.publishStatus(row.AuthorID, row.PostID)
 	}
-	if status == statusRead && prev != statusRead {
-		p.maybePublicNote(row)
-	}
 	return true
 }
 
@@ -109,55 +105,76 @@ func (p *ReadReceiptPlugin) publishStatus(authorID, postID string) {
 	}, &model.WebsocketBroadcast{UserId: authorID})
 }
 
-func (p *ReadReceiptPlugin) maybePublicNote(row *receiptRow) {
-	if row == nil || row.PublicNoteAt > 0 || !p.getConfiguration().PostPublicReceiptOnRead {
-		return
+func noteBelongsTo(post *model.Post, sourceID string) bool {
+	if !isNotePost(post) || sourceID == "" {
+		return false
 	}
-	names := p.recipientLabels(row)
+	if fmt.Sprint(post.GetProp(propFor)) == sourceID {
+		return true
+	}
+	// Notes created before the source prop used the message itself as RootId.
+	return post.RootId == sourceID && post.GetProp(propFor) == nil
+}
+
+func isNotePost(post *model.Post) bool {
+	if post == nil || post.GetProp(propNote) == nil {
+		return false
+	}
+	return fmt.Sprint(post.GetProp(propNote)) == "true"
+}
+
+func noteRootID(source *model.Post) string {
+	if source == nil {
+		return ""
+	}
+	if source.RootId != "" {
+		return source.RootId
+	}
+	return source.Id
+}
+
+func noteMessageFor(channelType model.ChannelType, authorName string, read, unread []string) string {
+	read = append([]string(nil), read...)
+	unread = append([]string(nil), unread...)
+	sort.Strings(read)
+	sort.Strings(unread)
+	if channelType == model.ChannelTypeDirect {
+		return directNote(authorName, read, unread)
+	}
+	return groupedNote(read, unread)
+}
+
+func directNote(authorName string, read, unread []string) string {
+	if len(read) > 0 {
+		return fmt.Sprintf("%s Seen by %s.", authorName, read[0])
+	}
+	other := "the other person"
+	if len(unread) > 0 {
+		other = unread[0]
+	}
+	return fmt.Sprintf("%s Not yet seen by %s.", authorName, other)
+}
+
+func groupedNote(read, unread []string) string {
+	var b strings.Builder
+	b.WriteString("**Read**\n")
+	writeNoteNames(&b, read, "No one yet")
+	b.WriteString("\n\n**Not yet read**\n")
+	writeNoteNames(&b, unread, "No one")
+	return b.String()
+}
+
+func writeNoteNames(b *strings.Builder, names []string, empty string) {
 	if len(names) == 0 {
+		b.WriteString(empty)
 		return
 	}
-	author, _ := p.API.GetUser(row.AuthorID)
-	authorName := "@unknown"
-	if author != nil && author.Username != "" {
-		authorName = "@" + author.Username
-	}
-	msg := noteMessage(authorName, names)
-	post := &model.Post{
-		UserId:    row.AuthorID,
-		ChannelId: row.ChannelID,
-		RootId:    row.PostID,
-		Message:   msg,
-	}
-	post.AddProp(propNote, "true")
-	post.AddProp(propSeenAt, strconv.FormatInt(seenAtMillis(row), 10))
-	if _, appErr := p.API.CreatePost(post); appErr != nil {
-		p.API.LogWarn("read-receipt public note failed", "err", appErr.Error(), "post_id", row.PostID)
-		return
-	}
-	row.PublicNoteAt = time.Now().UnixMilli()
-	_ = p.store.SaveState(row.PostID, row.Status, row.States, row.PublicNoteAt)
-}
-
-func (p *ReadReceiptPlugin) recipientLabels(row *receiptRow) []string {
-	var names []string
-	for id, st := range row.States {
-		if st.ReadAt == 0 {
-			continue
+	for i, name := range names {
+		if i > 0 {
+			b.WriteString("\n")
 		}
-		u, appErr := p.API.GetUser(id)
-		if appErr != nil || u == nil {
-			names = append(names, "@unknown")
-			continue
-		}
-		names = append(names, "@"+u.Username)
+		b.WriteString(name)
 	}
-	sort.Strings(names)
-	return names
-}
-
-func noteMessage(authorName string, names []string) string {
-	return fmt.Sprintf("%s Seen by %s.", authorName, joinLabels(names))
 }
 
 func seenAtMillis(row *receiptRow) int64 {
@@ -174,17 +191,4 @@ func seenAtMillis(row *receiptRow) int64 {
 		return latest
 	}
 	return row.CreateAt
-}
-
-func joinLabels(names []string) string {
-	switch len(names) {
-	case 0:
-		return ""
-	case 1:
-		return names[0]
-	case 2:
-		return names[0] + " and " + names[1]
-	default:
-		return strings.Join(names[:len(names)-1], ", ") + ", and " + names[len(names)-1]
-	}
 }

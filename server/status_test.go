@@ -95,13 +95,55 @@ func TestSkipChannelReceipt(t *testing.T) {
 	}
 }
 
-func TestNoteMessageHasNoZoneLabel(t *testing.T) {
-	msg := noteMessage("@ravi", []string{"@mani"})
-	if strings.Contains(msg, "UTC") || strings.Contains(msg, " at ") {
-		t.Fatalf("note bakes a clock time: %s", msg)
+func TestNoteRootUsesThreadRoot(t *testing.T) {
+	root := &model.Post{Id: "root"}
+	if noteRootID(root) != "root" {
+		t.Fatalf("root=%s", noteRootID(root))
 	}
-	if msg != "@ravi Seen by @mani." {
-		t.Fatalf("msg=%s", msg)
+	reply := &model.Post{Id: "reply", RootId: "root"}
+	if noteRootID(reply) != "root" {
+		t.Fatalf("reply=%s", noteRootID(reply))
+	}
+	note := &model.Post{Id: "note", RootId: "root"}
+	note.AddProp(propNote, "true")
+	note.AddProp(propFor, "reply")
+	if !noteBelongsTo(note, "reply") || noteBelongsTo(note, "other") {
+		t.Fatal("source prop did not select the note")
+	}
+}
+
+func TestNoteMessageHasNoZoneLabel(t *testing.T) {
+	seen := noteMessageFor(model.ChannelTypeDirect, "@ravi", []string{"@mani"}, nil)
+	if strings.Contains(seen, "UTC") || strings.Contains(seen, " at ") {
+		t.Fatalf("note bakes a clock time: %s", seen)
+	}
+	if seen != "@ravi Seen by @mani." {
+		t.Fatalf("msg=%s", seen)
+	}
+	pending := noteMessageFor(model.ChannelTypeDirect, "@ravi", nil, []string{"@mani"})
+	if pending != "@ravi Not yet seen by @mani." || strings.Contains(pending, "UTC") || strings.Contains(pending, ":") {
+		t.Fatalf("pending=%s", pending)
+	}
+	grouped := noteMessageFor(model.ChannelTypeOpen, "@ravi", []string{"@sam", "@mani"}, []string{"@zia"})
+	if strings.Contains(grouped, "UTC") || strings.Contains(grouped, " at ") || strings.Contains(grouped, ":") {
+		t.Fatalf("grouped bakes a clock: %s", grouped)
+	}
+	if !strings.Contains(grouped, "**Read**") || !strings.Contains(grouped, "**Not yet read**") {
+		t.Fatalf("grouped=%s", grouped)
+	}
+	if !strings.Contains(grouped, "@mani") || !strings.Contains(grouped, "@sam") || !strings.Contains(grouped, "@zia") {
+		t.Fatalf("grouped=%s", grouped)
+	}
+	if strings.Index(grouped, "@mani") > strings.Index(grouped, "@sam") {
+		t.Fatalf("expected sorted names: %s", grouped)
+	}
+	gm := noteMessageFor(model.ChannelTypeGroup, "@ravi", nil, []string{"@sam"})
+	if !strings.Contains(gm, "**Not yet read**") || strings.Contains(gm, "Seen by") {
+		t.Fatalf("group=%s", gm)
+	}
+	unknown := noteMessageFor("", "@ravi", []string{"@a"}, []string{"@b"})
+	if strings.Contains(unknown, "Seen by") || !strings.Contains(unknown, "**Read**") || !strings.Contains(unknown, "@b") {
+		t.Fatalf("missing channel type must stay a member list: %s", unknown)
 	}
 	row := &receiptRow{CreateAt: 10, States: map[string]recipientState{
 		"mani": {ReadAt: 20},

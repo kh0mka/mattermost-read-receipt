@@ -14,9 +14,10 @@ import (
 
 const (
 	pluginID      = "com.mst.read-receipt"
-	pluginVersion = "0.2.0"
+	pluginVersion = "0.3.3"
 	wsEvent       = "read_receipt_updated"
 	propNote      = "mst_read_receipt_note"
+	propFor       = "mst_read_receipt_for"
 	propSeenAt    = "mst_read_receipt_seen_at"
 )
 
@@ -161,9 +162,6 @@ func (p *ReadReceiptPlugin) MessageHasBeenPosted(_ *plugin.Context, post *model.
 	p.API.LogInfo("read-receipt tracking message", "post_id", post.Id, "channel_type", string(channel.Type), "status", status, "recipients", len(states))
 	if status != statusPending {
 		p.publishStatus(row.AuthorID, row.PostID)
-		if status == statusRead {
-			p.maybePublicNote(&row)
-		}
 	}
 }
 
