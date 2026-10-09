@@ -59,7 +59,7 @@ func (p *ReadReceiptPlugin) refreshOne(row *receiptRow) bool {
 	if len(members) == 0 {
 		return false
 	}
-	status, states, changed := evaluate(row.AuthorID, row.CreateAt, members, row.States)
+	status, states, changed := evaluate(row.AuthorID, row.CreateAt, members, row.States, time.Now().UnixMilli(), false)
 	if status == row.Status && !changed {
 		return false
 	}

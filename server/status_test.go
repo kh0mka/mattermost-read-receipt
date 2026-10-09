@@ -7,14 +7,30 @@ import (
 	"github.com/mattermost/mattermost/server/public/model"
 )
 
-func TestEvaluateSeenWhenViewedAtOrAfterCreate(t *testing.T) {
+func TestReadLaterStoresObservationTime(t *testing.T) {
 	prev := map[string]recipientState{
-		"bob": {},
+		"bob": {LastViewedAt: 500},
 	}
+	// LastViewedAt stuck at the post time must not become the Seen clock.
 	status, next, changed := evaluate("ann", 1000, []memberView{
 		{UserID: "ann", LastViewedAt: 5000},
 		{UserID: "bob", LastViewedAt: 1000},
-	}, prev)
+	}, prev, 90000, false)
+	if !changed || status != statusRead {
+		t.Fatalf("status=%s changed=%v", status, changed)
+	}
+	if next["bob"].ReadAt != 90000 {
+		t.Fatalf("read_at=%d", next["bob"].ReadAt)
+	}
+	if next["bob"].ReadAt <= 1000 {
+		t.Fatal("later read stored the delivery time")
+	}
+}
+
+func TestImmediateViewCanMatchCreate(t *testing.T) {
+	status, next, changed := evaluate("ann", 1000, []memberView{
+		{UserID: "bob", LastViewedAt: 5000},
+	}, map[string]recipientState{"bob": {}}, 1100, true)
 	if !changed || status != statusRead {
 		t.Fatalf("status=%s changed=%v", status, changed)
 	}
@@ -31,7 +47,7 @@ func TestEvaluatePartialAndNoBackwardRead(t *testing.T) {
 	status, next, changed := evaluate("ann", 1000, []memberView{
 		{UserID: "bob", LastViewedAt: 200},
 		{UserID: "cara", LastViewedAt: 900},
-	}, prev)
+	}, prev, 5000, false)
 	if status != statusPartial {
 		t.Fatalf("status=%s", status)
 	}
@@ -49,7 +65,7 @@ func TestEvaluatePartialAndNoBackwardRead(t *testing.T) {
 func TestEvaluatePending(t *testing.T) {
 	status, _, changed := evaluate("ann", 5000, []memberView{
 		{UserID: "bob", LastViewedAt: 1000},
-	}, map[string]recipientState{"bob": {LastViewedAt: 1000}})
+	}, map[string]recipientState{"bob": {LastViewedAt: 1000}}, 6000, false)
 	if status != statusPending || changed {
 		t.Fatalf("status=%s changed=%v", status, changed)
 	}
@@ -62,7 +78,7 @@ func TestEvaluateDropsDepartedMember(t *testing.T) {
 	}
 	status, next, changed := evaluate("ann", 1000, []memberView{
 		{UserID: "bob", LastViewedAt: 1500},
-	}, prev)
+	}, prev, 4000, false)
 	if _, ok := next["left"]; ok {
 		t.Fatal("departed member still counted")
 	}

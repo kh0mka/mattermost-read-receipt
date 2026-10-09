@@ -25,7 +25,7 @@ When several messages from the same person are grouped, Mattermost hides the ext
 
 ## What “Seen” means
 
-Seen means the recipient’s channel view time is at or after the message (`LastViewedAt >= post.CreateAt`). Mattermost updates that time when someone opens the conversation in the browser, desktop app, or mobile app. It is not proof they read that specific text.
+Seen means the recipient has opened the conversation (`LastViewedAt >= post.CreateAt`). Mattermost updates that field when someone opens the conversation in the browser, desktop app, or mobile app. The clock in the popover is not that field: it often stays equal to the message. A later open stores the server time of the first check that sees it, so Seen is after Delivered. If they already had the conversation open when the message was sent, Seen can match Delivered. A stored read time does not move backward. It is not proof they read that specific text.
 
 The author is not in the recipient list. In a group message, every other member is included. In a public or private channel, the same rule applies up to **50 other members**. A channel with more than 50 other members is not tracked, so the poller does not walk a company-wide channel. A channel that later grows past that cap stops being tracked.
 

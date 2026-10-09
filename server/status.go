@@ -31,8 +31,11 @@ type recipientState struct {
 }
 
 // evaluate applies channel view times to receipt state.
-// Seen means LastViewedAt >= the post create time. Read times never move backward.
-func evaluate(authorID string, createAt int64, members []memberView, prev map[string]recipientState) (string, map[string]recipientState, bool) {
+// Seen means LastViewedAt >= the post create time. The displayed read clock is
+// not LastViewedAt: Mattermost often leaves that field equal to the post.
+// A later open stores observedAt (the poll's server time). Someone already in
+// the conversation at insert keeps the post create time. Read times never move backward.
+func evaluate(authorID string, createAt int64, members []memberView, prev map[string]recipientState, observedAt int64, atInsert bool) (string, map[string]recipientState, bool) {
 	next := map[string]recipientState{}
 	changed := false
 	for _, m := range members {
@@ -45,7 +48,7 @@ func evaluate(authorID string, createAt int64, members []memberView, prev map[st
 			changed = true
 		}
 		if st.ReadAt == 0 && m.LastViewedAt >= createAt && createAt > 0 {
-			st.ReadAt = m.LastViewedAt
+			st.ReadAt = readClock(createAt, observedAt, atInsert)
 			changed = true
 		}
 		next[m.UserID] = st
@@ -83,6 +86,17 @@ func evaluate(authorID string, createAt int64, members []memberView, prev map[st
 		status = statusPartial
 	}
 	return status, next, changed
+}
+
+// readClock is the time shown as Seen or Read.
+// At send, an open conversation uses the post time. A later observation uses
+// the server time of that check, which is after delivery even when
+// LastViewedAt is still the post time.
+func readClock(createAt, observedAt int64, atInsert bool) int64 {
+	if atInsert || observedAt <= createAt {
+		return createAt
+	}
+	return observedAt
 }
 
 // skipChannelReceipt reports whether a public or private channel is too large

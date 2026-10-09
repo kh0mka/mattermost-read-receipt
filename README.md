@@ -1,6 +1,6 @@
 # Mattermost read receipts
 
-Team Edition plugin (`com.mst.read-receipt`, version 0.3.3) for allowed senders. It shows sent, delivered, and seen status on direct messages, group messages, and channels. Each of those is a separate switch. There is no per-message request. Recipients do not see extra controls.
+Team Edition plugin (`com.mst.read-receipt`, version 0.3.4) for allowed senders. It shows sent, delivered, and seen status on direct messages, group messages, and channels. Each of those is a separate switch. There is no per-message request. Recipients do not see extra controls.
 
 Requires Mattermost Server 11.0.0 or newer.
 
@@ -35,7 +35,7 @@ Formatting is `Intl.DateTimeFormat` with the `timeZone` option.
 
 ## What Seen means
 
-Seen means the recipient’s channel view time is at or after the message (`LastViewedAt >= post.CreateAt`). Mattermost updates that time when someone opens the conversation in the browser, desktop app, or mobile app. It is not proof they read that specific text.
+Seen means the recipient has opened the conversation (`LastViewedAt >= post.CreateAt`). Mattermost updates that field when someone opens the conversation in the browser, desktop app, or mobile app. The clock in the list is not that field. It often stays equal to the message time. A later open stores the server time of the first check that notices it, so Seen is after Delivered. Delivered stays the server accept time (`post.CreateAt`). If they already had the conversation open when the message was sent, Seen can match Delivered. A stored read time does not move backward. It is not proof they read that specific text.
 
 The author is not in the recipient list. In a group message, every other member is included.
 

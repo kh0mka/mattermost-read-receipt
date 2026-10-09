@@ -14,7 +14,7 @@ import (
 
 const (
 	pluginID      = "com.mst.read-receipt"
-	pluginVersion = "0.3.3"
+	pluginVersion = "0.3.4"
 	wsEvent       = "read_receipt_updated"
 	propNote      = "mst_read_receipt_note"
 	propFor       = "mst_read_receipt_for"
@@ -143,7 +143,7 @@ func (p *ReadReceiptPlugin) MessageHasBeenPosted(_ *plugin.Context, post *model.
 		states[m.UserID] = recipientState{}
 	}
 	now := time.Now().UnixMilli()
-	status, states, _ := evaluate(post.UserId, post.CreateAt, members, states)
+	status, states, _ := evaluate(post.UserId, post.CreateAt, members, states, now, true)
 	row := receiptRow{
 		PostID:       post.Id,
 		ChannelID:    post.ChannelId,
