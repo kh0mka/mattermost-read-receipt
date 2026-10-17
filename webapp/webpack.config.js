@@ -2,8 +2,8 @@ const path = require('path');
 
 const PLUGIN_ID = require('../plugin.json').id;
 
-// Mattermost 11.11 assigns these on window in the webapp chunk. It does not
-// assign mattermost-redux, so that package must stay external and unused.
+// Mattermost 12.0 still assigns these on window. It does not assign
+// mattermost-redux, so that package must stay external and unused.
 module.exports = {
     entry: ['./src/index.js'],
     resolve: {

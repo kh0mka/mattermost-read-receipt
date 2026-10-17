@@ -14,7 +14,7 @@ import (
 
 const (
 	pluginID      = "com.mst.read-receipt"
-	pluginVersion = "0.3.4"
+	pluginVersion = "0.3.5"
 	wsEvent       = "read_receipt_updated"
 	propNote      = "mst_read_receipt_note"
 	propFor       = "mst_read_receipt_for"

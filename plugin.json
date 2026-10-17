@@ -2,7 +2,7 @@
   "id": "com.mst.read-receipt",
   "name": "MST Read Receipts",
   "description": "Automatic sent, delivered, and seen status on direct messages, group messages, and channels from allowed senders.",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "min_server_version": "11.0.0",
   "server": {
     "executables": {

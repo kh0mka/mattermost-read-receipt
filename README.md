@@ -1,8 +1,8 @@
 # Mattermost read receipts
 
-Team Edition plugin (`com.mst.read-receipt`, version 0.3.4) for allowed senders. It shows sent, delivered, and seen status on direct messages, group messages, and channels. Each of those is a separate switch. There is no per-message request. Recipients do not see extra controls.
+Team Edition plugin (`com.mst.read-receipt`, version 0.3.5) for allowed senders. It shows sent, delivered, and seen status on direct messages, group messages, and channels. Each of those is a separate switch. There is no per-message request. Recipients do not see extra controls.
 
-Requires Mattermost Server 11.0.0 or newer.
+Requires Mattermost Server 11.0.0 or newer. Tested on Team Edition 12.0.
 
 ## What the ticks mean
 
