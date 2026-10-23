@@ -1,5 +1,7 @@
 import React from 'react';
+import {useIntl} from 'react-intl';
 
+import {currentLocale, MSG_PREFIX as M, t} from './i18n';
 import {id as pluginId} from './manifest';
 
 const GREY = '#8c97a5';
@@ -178,7 +180,8 @@ export function refreshNow() {
 }
 
 function useStatus(postId) {
-    return React.useSyncExternalStore(subscribe, () => cache.get(postId) || null);
+    const getSnapshot = () => cache.get(postId) || null;
+    return React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
 function viewerTimeZone() {
@@ -207,7 +210,7 @@ function viewerTimeZone() {
 
 function formatTime(ms, withYear) {
     if (!ms) {
-        return 'Not yet';
+        return t('time.notYet');
     }
     const options = {
         month: 'short',
@@ -222,12 +225,14 @@ function formatTime(ms, withYear) {
     if (tz) {
         options.timeZone = tz;
     }
+    // The viewer's language, not the browser's: deterministic across clients.
+    const locale = currentLocale();
     try {
-        return new Intl.DateTimeFormat(undefined, options).format(new Date(ms));
+        return new Intl.DateTimeFormat(locale, options).format(new Date(ms));
     } catch (e) {
         delete options.timeZone;
         try {
-            return new Intl.DateTimeFormat(undefined, options).format(new Date(ms));
+            return new Intl.DateTimeFormat(locale, options).format(new Date(ms));
         } catch (err) {
             return '';
         }
@@ -242,15 +247,53 @@ function isReceiptNote(post) {
     return Boolean(post && post.props && (post.props[NOTE_PROP] === 'true' || post.props[NOTE_PROP] === true));
 }
 
+// Shared channel/group notes keep the stored names; only the labels and
+// the empty placeholders are localized. The markdown bold markers survive.
+function translateSharedNote(message) {
+    return message
+        .replace(/\*\*Read\*\*/g, '**' + t('note.readLabel') + '**')
+        .replace(/\*\*Not yet read\*\*/g, '**' + t('note.notYetReadLabel') + '**')
+        .replace(/\bNo one yet\b/g, t('note.noOneYet'))
+        .replace(/\bNo one\b/g, t('note.noOne'));
+}
+
+function noteReader(name) {
+    const trimmed = name.trim();
+    if (trimmed === 'the other person') {
+        return t('note.otherPerson');
+    }
+    return trimmed;
+}
+
+// Legacy direct-message notes: "Имя Seen by Имя." / "Имя Not yet seen by
+// Имя.", optionally followed by " at YYYY-MM-DD HH:MM UTC". The UTC suffix
+// is stripped before matching, because "when" already carries the time.
+function translateDmNote(message, when) {
+    let core = message;
+    if (UTC_NOTE.test(core)) {
+        core = core.replace(UTC_NOTE, '').replace(/\s+\./, '.').replace(/\s{2,}/g, ' ').trim();
+    }
+    let match = /^(.*) Seen by (.*)\.$/.exec(core);
+    if (match) {
+        const reader = noteReader(match[2]);
+        return when ? t('note.dmSeenAt', {reader, time: when}) : t('note.dmSeen', {reader});
+    }
+    match = /^(.*) Not yet seen by (.*)\.$/.exec(core);
+    if (match) {
+        const reader = noteReader(match[2]);
+        return when ? t('note.dmNotYetSeenAt', {reader, time: when}) : t('note.dmNotYetSeen', {reader});
+    }
+    return null;
+}
+
 export function formatNoteMessage(post, message) {
     if (!message || !isReceiptNote(post)) {
         return message;
     }
-    // Channel and group notes are a shared Read / Not yet read list. Leave
-    // them unchanged. Only the single-line direct-message note gets a
-    // viewer-local time, and only in this webapp.
+    // Channel and group notes are a shared Read / Not yet read list. Only
+    // the single-line direct-message note gets a viewer-local time.
     if (message.indexOf('\n') !== -1 || message.indexOf('Not yet read') !== -1) {
-        return message;
+        return currentLocale() === 'ru' ? translateSharedNote(message) : message;
     }
     let ms = Number(post.props && post.props[SEEN_PROP]);
     if (!ms) {
@@ -263,14 +306,25 @@ export function formatNoteMessage(post, message) {
         }
     }
     const when = ms ? formatTime(ms, true) : '';
-    if (when) {
-        if (UTC_NOTE.test(message)) {
-            return message.replace(UTC_NOTE, ' at ' + when);
+    if (currentLocale() !== 'ru') {
+        // English keeps the historical rendering, byte for byte.
+        if (when) {
+            if (UTC_NOTE.test(message)) {
+                return message.replace(UTC_NOTE, ' at ' + when);
+            }
+            return message.replace(/\.\s*$/, '') + ' at ' + when + '.';
         }
-        return message.replace(/\.\s*$/, '') + ' at ' + when + '.';
+        if (UTC_NOTE.test(message)) {
+            return message.replace(UTC_NOTE, '').replace(/\s+\./, '.').replace(/\s{2,}/g, ' ');
+        }
+        return message;
     }
-    if (UTC_NOTE.test(message)) {
-        return message.replace(UTC_NOTE, '').replace(/\s+\./, '.').replace(/\s{2,}/g, ' ');
+    const localized = translateDmNote(message, when);
+    if (localized) {
+        return localized;
+    }
+    if (when && UTC_NOTE.test(message)) {
+        return message.replace(UTC_NOTE, ' · ' + when);
     }
     return message;
 }
@@ -313,15 +367,19 @@ function usesGroupedList(status) {
     return status.channel_type !== 'D';
 }
 
-function labelFor(status) {
+function labelFor(status, formatMessage) {
     const grouped = usesGroupedList(status);
     if (status && status.status === 'read') {
-        return grouped ? 'Read by everyone' : 'Seen';
+        return grouped ?
+            formatMessage({id: M + 'status.readByEveryone', defaultMessage: 'Read by everyone'}) :
+            formatMessage({id: M + 'status.seen', defaultMessage: 'Seen'});
     }
     if (status && status.status === 'partial') {
-        return grouped ? 'Read by some' : 'Seen by some';
+        return grouped ?
+            formatMessage({id: M + 'status.readBySome', defaultMessage: 'Read by some'}) :
+            formatMessage({id: M + 'status.seenBySome', defaultMessage: 'Seen by some'});
     }
-    return 'Sent';
+    return formatMessage({id: M + 'status.sent', defaultMessage: 'Sent'});
 }
 
 function sortedPeople(list) {
@@ -332,11 +390,11 @@ function sortedPeople(list) {
     });
 }
 
-function personName(person) {
-    return person.display_name || person.username || 'Someone';
+function personName(person, formatMessage) {
+    return person.display_name || person.username || formatMessage({id: M + 'person.unknown', defaultMessage: 'Someone'});
 }
 
-function people(list, timeField, emptyLabel) {
+function people(list, timeField, emptyLabel, formatMessage) {
     const rows = sortedPeople(list);
     if (!rows.length) {
         return <div>{emptyLabel}</div>;
@@ -345,7 +403,7 @@ function people(list, timeField, emptyLabel) {
         <ul className='mst-rr-people'>
             {rows.map((person) => (
                 <li key={person.user_id}>
-                    {timeField ? personName(person) + ' · ' + formatTime(person[timeField]) : personName(person)}
+                    {timeField ? personName(person, formatMessage) + ' · ' + formatTime(person[timeField]) : personName(person, formatMessage)}
                 </li>
             ))}
         </ul>
@@ -406,6 +464,7 @@ function mountPopover(node) {
 }
 
 function Popover({status, anchor, anchorRect, popRef}) {
+    const {formatMessage} = useIntl();
     const [box, setBox] = React.useState(() => placePopover(anchorRect, 96));
     React.useLayoutEffect(() => {
         let frame = 0;
@@ -445,12 +504,12 @@ function Popover({status, anchor, anchorRect, popRef}) {
         body = (
             <React.Fragment>
                 <div className='mst-rr-group'>
-                    <span className='mst-rr-label'>Read</span>
-                    {people(recipients.filter((person) => person.seen_at), 'seen_at', 'No one yet')}
+                    <span className='mst-rr-label'>{formatMessage({id: M + 'list.read', defaultMessage: 'Read'})}</span>
+                    {people(recipients.filter((person) => person.seen_at), 'seen_at', formatMessage({id: M + 'list.noOneYet', defaultMessage: 'No one yet'}), formatMessage)}
                 </div>
                 <div className='mst-rr-group'>
-                    <span className='mst-rr-label'>Not yet read</span>
-                    {people(recipients.filter((person) => !person.seen_at), '', 'No one')}
+                    <span className='mst-rr-label'>{formatMessage({id: M + 'list.notYetRead', defaultMessage: 'Not yet read'})}</span>
+                    {people(recipients.filter((person) => !person.seen_at), '', formatMessage({id: M + 'list.noOne', defaultMessage: 'No one'}), formatMessage)}
                 </div>
             </React.Fragment>
         );
@@ -460,17 +519,17 @@ function Popover({status, anchor, anchorRect, popRef}) {
             <React.Fragment>
                 <div className='mst-rr-row'>
                     <Double first={BLUE} second={BLUE}/>
-                    <span><span className='mst-rr-label'>Seen</span>{formatTime(seenAt)}</span>
+                    <span><span className='mst-rr-label'>{formatMessage({id: M + 'list.seen', defaultMessage: 'Seen'})}</span>{formatTime(seenAt)}</span>
                 </div>
                 <div className='mst-rr-row'>
                     <Single color={GREY}/>
-                    <span><span className='mst-rr-label'>Delivered</span>{formatTime(deliveredAt)}</span>
+                    <span><span className='mst-rr-label'>{formatMessage({id: M + 'list.delivered', defaultMessage: 'Delivered'})}</span>{formatTime(deliveredAt)}</span>
                 </div>
             </React.Fragment>
         );
     }
     return mountPopover(
-        <div ref={popRef} className='mst-rr-pop' style={{position: 'fixed', top: box.top, left: box.left}} role='dialog' aria-label='Message status'>
+        <div ref={popRef} className='mst-rr-pop' style={{position: 'fixed', top: box.top, left: box.left}} role='dialog' aria-label={formatMessage({id: M + 'dialog.messageStatus', defaultMessage: 'Message status'})}>
             {body}
         </div>
     );
@@ -493,6 +552,7 @@ function trackedPost(post) {
 }
 
 function StatusButton({post}) {
+    const {formatMessage} = useIntl();
     const status = useStatus(post && post.id);
     const btnRef = React.useRef(null);
     const popRef = React.useRef(null);
@@ -556,7 +616,7 @@ function StatusButton({post}) {
     if (!visible) {
         return null;
     }
-    const label = labelFor(status);
+    const label = labelFor(status, formatMessage);
     return (
         <React.Fragment>
             <button

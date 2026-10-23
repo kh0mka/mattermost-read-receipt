@@ -64,6 +64,17 @@ People who should see receipts, and who do not have an allowed role, can be list
 
 Thread Seen and Read replies stay off. `PostPublicReceiptOnRead` stays false. The plugin does not post or update a receipt thread note. Existing replies are left in place. Status is the tick and the list beside it. The original message is not edited.
 
+## Localization
+
+Russian and English. The language follows the user's profile: `ru*` — Russian, `en*` — English, anything else (including an unset locale) — **English**, the plugin default. It covers the message UI (ticks, lists, notes) and the System Console settings, and switches automatically — no reinstall, no rebuild.
+
+- **Per user:** Settings → My Account → Language — `ru-RU` (Русский) or `en`.
+- **Default for everyone:** System Console → Settings → General → Default Language. New users and users without a chosen language get it; existing users keep their own setting.
+
+Implemented on the standard Mattermost plugin i18n pipeline: dictionaries in `webapp/i18n/` are merged into the webapp via `registry.registerTranslations`, the message UI renders through react-intl (`useIntl`), and the console settings are localized custom components (the same approach the official plugins use). Dictionaries: `webapp/i18n/ru.json`, `webapp/i18n/en.json` (message IDs are namespaced with the plugin ID).
+
+Stored receipt text is not rewritten: the server keeps the canonical English, and the webapp renders legacy direct-message notes and the shared Read / Not yet read labels in the viewer's language. Names are always shown as stored.
+
 ## Build and install
 
 From the repository root, with Docker:
